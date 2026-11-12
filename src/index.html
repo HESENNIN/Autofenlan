@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分栏打印｜把长表排成 A4 分栏</title>
+<meta name="description" content="上传 Excel，自动按 A4 分栏重排。栏内序号连续，每栏都带表头，页脚是公文页码。文件不上传。">
+<link rel="stylesheet" href="app.css">
+<script>document.documentElement.className = 'js';</script>
+</head>
+<body>
+
+<div class="drop-veil">松手就排</div>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="mark" href="#top"><i></i>分栏打印</a>
+    <a class="link" href="#tool">工具</a>
+    <a class="link" href="#mech">原理</a>
+    <a class="link" href="#faq">常见问题</a>
+    <button class="mini-cta" type="button" data-pick>选择表格</button>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap">
+      <h1 class="rv"><span>一张长表，</span><span>两栏排完。</span></h1>
+      <p class="lead rv" style="--d:70ms">上传 Excel，自动按 A4 分栏重排。栏内序号连续，每栏都带表头，页脚是「第 X 页 共 Y 页」。文件不离开这台电脑。</p>
+      <div class="hero-actions rv" style="--d:140ms">
+        <button class="btn" type="button" data-pick>选择表格</button>
+        <button class="btn-quiet" type="button" data-sample>用示例数据看效果</button>
+      </div>
+      <div class="hero-facts rv" style="--d:200ms">
+        <span>xlsx / xls / csv</span>
+        <span>不上传服务器</span>
+        <span>断网也能用</span>
+      </div>
+    </div>
+    <div class="hero-paper" id="heroPaper"></div>
+  </section>
+
+  <section class="tool section" id="tool">
+    <div class="wrap">
+      <div class="tool-head">
+        <h2 class="h2 rv">把表格放进来。</h2>
+      </div>
+
+      <div class="stats rv" style="--d:110ms">
+        <div class="stat"><b id="sRows">0</b><span id="sRowsLabel">行数据</span></div>
+        <div class="stat accent"><b id="sPages">0</b><span>页，单面打印</span></div>
+        <div class="stat"><b id="sSheets">0</b><span>张纸，双面打印</span></div>
+      </div>
+
+      <p class="note stats-note rv" style="--d:130ms">认 xlsx、xls、csv。读完自动挑一组最省纸的版式，改一次，页数立刻重算。</p>
+
+      <div class="panel rv" style="--d:150ms">
+        <div class="panel-row">
+          <div class="field">
+            <span class="field-label">版式</span>
+            <div class="seg" data-seg="preset">
+              <span class="seg-ind" aria-hidden="true"></span>
+              <button type="button" data-v="auto" aria-pressed="true">自动</button>
+              <button type="button" data-v="clear">大字</button>
+              <button type="button" data-v="tight">省纸</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">方向</span>
+            <div class="seg" data-seg="orient">
+              <span class="seg-ind" aria-hidden="true"></span>
+              <button type="button" data-v="portrait" aria-pressed="true">竖版</button>
+              <button type="button" data-v="landscape" aria-pressed="false">横版</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">栏数</span>
+            <div class="seg" data-seg="cols">
+              <span class="seg-ind" aria-hidden="true"></span>
+              <button type="button" data-v="1" aria-pressed="false">1</button>
+              <button type="button" data-v="2" aria-pressed="true">2</button>
+              <button type="button" data-v="3" aria-pressed="false">3</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">字体</span>
+            <div class="seg" data-seg="face">
+              <span class="seg-ind" aria-hidden="true"></span>
+              <button type="button" data-v="song" aria-pressed="true">宋体</button>
+              <button type="button" data-v="hei" aria-pressed="false">黑体</button>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <div class="field" style="width:150px">
+            <span class="field-label" id="pRangeLabel">页码范围</span>
+            <input class="text-in" id="pRange" type="text" placeholder="全部" inputmode="numeric">
+          </div>
+          <button class="btn" id="printBtn" type="button">打印</button>
+        </div>
+
+        <div class="panel-row">
+          <div class="field" style="flex:1 1 150px">
+            <span class="field-label">字号</span>
+            <div class="slider"><input id="rFont" type="range" min="6" max="12" step="0.5" value="8"><output id="oFont">8 pt</output></div>
+          </div>
+          <div class="field" style="flex:1 1 150px">
+            <span class="field-label">行距</span>
+            <div class="slider"><input id="rLh" type="range" min="1.05" max="1.6" step="0.05" value="1.2"><output id="oLh">1.20</output></div>
+          </div>
+          <div class="field" style="flex:1 1 150px">
+            <span class="field-label">栏间距</span>
+            <div class="slider"><input id="rGut" type="range" min="3" max="14" step="0.5" value="6"><output id="oGut">6 mm</output></div>
+          </div>
+          <div class="field" style="flex:1 1 150px">
+            <span class="field-label">页边距</span>
+            <div class="slider"><input id="rMar" type="range" min="6" max="20" step="0.5" value="12"><output id="oMar">12 mm</output></div>
+          </div>
+        </div>
+
+        <div class="panel-row mid">
+          <label class="sw"><input id="cShade" type="checkbox" checked><i></i>表头底纹</label>
+          <label class="sw"><input id="cFoot" type="checkbox" checked><i></i>页码</label>
+          <div class="field" style="flex:1 1 240px; max-width:340px">
+            <span class="field-label">标题，可留空</span>
+            <input class="text-in" id="tTitle" type="text" placeholder="例如：设备巡检记录" maxlength="40">
+          </div>
+        </div>
+      </div>
+
+      <p class="note" style="margin-top:14px">打印沿用本机字体：有宋体就排宋体，没有时浏览器用系统衬线代替，字形略有差别，但预览和打印始终一致。</p>
+
+      <div class="stage-head">
+        <p class="note" id="stageNote">预览就是打印结果，缩放只影响屏幕。</p>
+        <div class="zoom" data-seg="zoom">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button type="button" data-v="fit" aria-pressed="true">适应宽度</button>
+          <button type="button" data-v="1" aria-pressed="false">100%</button>
+          <button type="button" data-v="0.5" aria-pressed="false">50%</button>
+        </div>
+      </div>
+
+      <div class="pickrow" id="sheetPick" style="display:none"></div>
+
+      <div class="stage" id="stage"><div class="stage-inner" id="stageInner"></div></div>
+    </div>
+  </section>
+
+  <section class="section mech" id="mech">
+    <div class="wrap">
+      <h2 class="h2 rv">四件小事，都不用你操心。</h2>
+      <div class="mech-grid">
+
+        <div class="tile tile-big rv">
+          <div>
+            <h3>左栏读到底，接着读右栏</h3>
+            <p>报纸式流向。一行永远不会被拆到两栏，序号从上到下连着走，翻页再续。下面这一段是预览里真实的一栏。</p>
+          </div>
+          <div class="art" id="tileFlow" data-ui></div>
+        </div>
+
+        <div class="tiles">
+          <div class="tile rv" style="--d:70ms">
+            <div>
+              <h3>每栏都有表头</h3>
+              <p>右栏不是没头没脑的接续，它自己带一遍列名。</p>
+            </div>
+            <div class="art" id="tileHead" data-ui></div>
+          </div>
+          <div class="tile rv" style="--d:130ms">
+            <div>
+              <h3>页码是公文格式</h3>
+              <p>页脚居中，总页数先算好再印，不是打完才知道共几页。</p>
+            </div>
+            <div class="art" id="tileFoot" data-ui></div>
+          </div>
+          <div class="tile rv" style="--d:190ms">
+            <div>
+              <h3>列宽能拖</h3>
+              <p>自动算的宽度不合适，按住表头边线拖一下，旁边一栏跟着让位。</p>
+            </div>
+            <div class="art" id="tileDrag" data-ui></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="section steps">
+    <div class="wrap">
+      <h2 class="h2 rv">从文件到纸面，三步。</h2>
+      <div class="stepbar rv" style="--d:70ms">
+        <div class="step">
+          <em>0.4 秒</em>
+          <b>拖进来</b>
+          <span>双击打开这个页面，把 Excel 拖到任意位置。解析在你自己的浏览器里完成。</span>
+        </div>
+        <div class="step">
+          <em>实时</em>
+          <b>调版式</b>
+          <span>方向、栏数、字号、行距、边距。每改一次，页数和纸张数立刻重算。</span>
+        </div>
+        <div class="step">
+          <em>一次</em>
+          <b>按打印</b>
+          <span>另开一个只含纸张的窗口，那边点打印即可。可选范围，先打两页试样。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap faq-grid">
+      <h2 class="h2 rv">常问的几条。</h2>
+      <div class="acc rv" style="--d:70ms">
+
+        <details open>
+          <summary>会改动我的表格内容吗？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>不会。工具只读取单元格的显示文本，不重排、不改格式、不四舍五入，也不合并重复值。所有列原样打印，空单元格就留空。</p></div>
+        </details>
+
+        <details>
+          <summary>为什么页数是这个数字？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>页数由行高、栏数和可用高度算出来。每一栏能放多少行是确定的：可用高度除以下一行的高度，向下取整。上面的数字就是实际排版结果，不是估算。</p></div>
+        </details>
+
+        <details>
+          <summary>一行会不会被拆到两栏？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>不会。行是排版的最小单位，装不下就整行挪到下一栏。所以栏底可能会留一点空白，这个空白换的是一行不被腰斩。</p></div>
+        </details>
+
+        <details>
+          <summary>表头是每栏一份还是每页一份？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>每栏都有一份。第二栏、第三栏顶部都会重新列出列名，散页之后单独拿一栏起来也知道是什么。</p></div>
+        </details>
+
+        <details>
+          <summary>页码长什么样？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>页脚居中，宋体，格式是「第 3 页 共 81 页」。总页数在排版时就算好了，不依赖打印机。可以在面板里关掉。</p></div>
+        </details>
+
+        <details>
+          <summary>数据会被上传吗？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>不会。这个页面是一个离线文件，Excel 在你的浏览器里解析，没有服务器，也没有任何网络请求。断网、拔网线都一样能用。</p></div>
+        </details>
+
+        <details>
+          <summary>打印对话框要怎么设？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>点「打印」会单独开一个只包含纸张的窗口，那个窗口里再点一次打印，浏览器对话框就会出来。边距选「无」，缩放保持 100%，把「页眉和页脚」的勾去掉。纸张选 A4，方向和面板里的设置保持一致。版式已经按 A4 精确排版，浏览器不要再缩放。</p><p>只要前几页试样，在「页码范围」里填 1-10 即可。</p></div>
+        </details>
+
+        <details>
+          <summary>内网的老浏览器能用吗？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>可以。整个页面按 Chrome 83 内核写，不使用更新的 CSS 特性和脚本语法，麒麟、统信、奇安信这类内网浏览器都能跑。数据全程在本机，不依赖任何网络。</p></div>
+        </details>
+
+        <details>
+          <summary>支持哪些文件？多工作表呢？<span class="pm" aria-hidden="true"></span></summary>
+          <div class="body"><p>支持 xlsx、xls、csv。一个文件里有多个工作表时，会列出来让你挑一个，不会一次全铺开。</p></div>
+        </details>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="close">
+    <a class="close-band" href="#tool" data-pick>
+      <div class="wrap topnote">
+        <p>文件在你的浏览器里解析。没有服务器，也没有上传，关掉页面就什么都不剩。</p>
+        <svg class="arrow" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+          <path d="M12 32L32 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M15 12h17v17" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="wrap big">选择表格</span>
+    </a>
+  </section>
+
+</main>
+
+<footer class="foot-main">
+  <div class="wrap">
+    <p class="foot-mark">分栏打印</p>
+    <p class="foot-sub">把长表排成 A4 分栏，全程在浏览器里完成。</p>
+    <div class="foot-links">
+      <div>
+        <h4>这个工具</h4>
+        <ul>
+          <li><a href="#tool">打开排版台</a></li>
+          <li><a href="#mech">看排版规则</a></li>
+          <li><a href="#faq">打印设置</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>版式</h4>
+        <ul>
+          <li><a href="#tool">竖版单栏</a></li>
+          <li><a href="#tool">横版双栏</a></li>
+          <li><a href="#tool">横版三栏</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>说明</h4>
+        <ul>
+          <li><a href="#faq">数据不上传</a></li>
+          <li><a href="#faq">不修改原文</a></li>
+          <li><a href="#faq">离线可用</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-end">
+      <span>分栏打印</span>
+      <span>表格解析 SheetJS · 排版与打印在本机完成</span>
+    </div>
+  </div>
+</footer>
+
+<div id="printRoot" aria-hidden="true"></div>
+
+<input id="file" type="file" accept=".xlsx,.xls,.csv" hidden>
+
+<script src="xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
