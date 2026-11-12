@@ -1,0 +1,9 @@
+node_modules/
+.taste-skill/
+src/xlsx.full.min.js
+
+# 任何表格数据与导出文件，绝不入库
+*.xlsx
+*.xls
+*.csv
+*.pdf
