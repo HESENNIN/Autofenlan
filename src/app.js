@@ -807,6 +807,218 @@
     }
   }
 
+  /* ---------------- 导出 Excel ----------------
+     打印版 sheet（版式冻结，一页一块+手动分页符）+ 数据 sheet（平表）。
+     Excel 只当渲染器；页脚用原生 &P，总页数写死为当前排版总页数。 */
+
+  var EX_BORDER = { style: 'thin', color: { argb: 'FF14161A' } };
+  var EX_HEADFILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECEEF1' } };
+
+  function mmToIn(mm) { return mm / 25.4; }
+  function mmToPt(mm) { return mm * 72 / 25.4; }
+  function mmToChars(mm) { return Math.max(0, (mm * PX_PER_MM - 5) / 7); }
+
+  function exFontName() {
+    return S.face === 'hei' ? 'SimHei' : 'SimSun';
+  }
+
+  function exStyleCell(cell, isWrap, opts) {
+    cell.font = { name: exFontName(), size: S.fontPt, bold: !!opts.header };
+    cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: !!isWrap };
+    var b = { right: EX_BORDER, bottom: EX_BORDER };
+    if (opts.firstCol) b.left = EX_BORDER;
+    if (opts.header) b.top = EX_BORDER;
+    cell.border = b;
+    if (opts.header && S.shade) cell.fill = EX_HEADFILL;
+  }
+
+  function exRowHeightMm(i) {
+    var L = LAYOUT, n = L.n, lines = 1, j;
+    for (j = 0; j < n; j++) {
+      var t = D.rows[i][j];
+      if (!t) continue;
+      var wv = WRAW.cols[j][i] / PX_PER_MM * (1 - L.k);
+      if (wv > L.inner[j] + 0.01) {
+        var l2 = Math.ceil(wv / L.inner[j]);
+        if (l2 > lines) lines = l2;
+      }
+    }
+    return L.cellH + (lines - 1) * L.lineMm;
+  }
+
+  function exIsWrap(j, i) {
+    var L = LAYOUT;
+    var t = D.rows[i][j];
+    return !!t && (WRAW.cols[j][i] / PX_PER_MM * (1 - L.k) > L.inner[j] + 0.01);
+  }
+
+  function buildWorkbook(rangeStr) {
+    if (typeof ExcelJS === 'undefined') return Promise.reject(new Error('ExcelJS 未加载'));
+    var list = parseRange(rangeStr, PAGES.length);
+    var L = LAYOUT, n = L.n, cols = S.cols;
+    var totalCols = n * cols + (cols - 1);
+    var wb = new ExcelJS.Workbook();
+    wb.creator = '分栏打印';
+
+    var ws = wb.addWorksheet('打印版', {
+      pageSetup: {
+        paperSize: 9,
+        orientation: S.orient === 'landscape' ? 'landscape' : 'portrait',
+        fitToPage: true, fitToWidth: 1, fitToHeight: 0, scale: 100,
+        margins: {
+          left: mmToIn(L.m), right: mmToIn(L.m),
+          top: mmToIn(L.m), bottom: mmToIn(L.m + L.footH),
+          header: 0.1, footer: mmToIn(Math.max(3, L.footH))
+        },
+        firstPageNumber: list[0] + 1, useFirstPageNumber: true
+      }
+    });
+    ws.headerFooter = { oddFooter: '&"' + exFontName() + '"&' + Math.round(S.fontPt) + '第 &P 页 共 ' + PAGES.length + ' 页' };
+
+    var colDefs = [];
+    for (var c = 0; c < cols; c++) {
+      for (var j = 0; j < n; j++) colDefs.push({ width: mmToChars(L.W[j]) });
+      if (c < cols - 1) colDefs.push({ width: mmToChars(L.gut) });
+    }
+    ws.columns = colDefs;
+
+    function blockCol(c, j) { return c * (n + 1) + j + 1; }
+    function gutterCol(c) { return c * (n + 1) + n + 1; }
+
+    var rowPtr = 1;
+    var titlePt = L.titleSize ? L.titleSize * 72 / 25.4 : 0;
+
+    for (var p = 0; p < list.length; p++) {
+      var pi = list[p];
+      var page = PAGES[pi];
+
+      if (S.title) {
+        ws.mergeCells(rowPtr, 1, rowPtr, totalCols);
+        var tc = ws.getRow(rowPtr).getCell(1);
+        tc.value = S.title;
+        tc.font = { name: exFontName(), size: titlePt, bold: true };
+        tc.alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getRow(rowPtr).height = mmToPt(L.titleH);
+        rowPtr++;
+      }
+
+      var hr = ws.getRow(rowPtr);
+      hr.height = mmToPt(L.headH);
+      for (var c2 = 0; c2 < cols; c2++) {
+        for (var j2 = 0; j2 < n; j2++) {
+          var hc = hr.getCell(blockCol(c2, j2));
+          hc.value = D.header[j2] || ' ';
+          exStyleCell(hc, false, { header: true, firstCol: j2 === 0 });
+        }
+        if (c2 < cols - 1) hr.getCell(gutterCol(c2)).value = '';
+      }
+      rowPtr++;
+
+      var len0 = page[0] ? page[0][1] - page[0][0] : 0;
+      var len1 = page[1] ? page[1][1] - page[1][0] : 0;
+      var len2 = page[2] ? page[2][1] - page[2][0] : 0;
+      var vrows = Math.max(len0, len1, len2);
+
+      for (var r2 = 0; r2 < vrows; r2++) {
+        var row = ws.getRow(rowPtr);
+        var maxH = 0;
+        for (var c3 = 0; c3 < cols; c3++) {
+          var seg = page[c3];
+          var segLen = seg ? seg[1] - seg[0] : 0;
+          if (r2 < segLen) {
+            var i = seg[0] + r2;
+            for (var j3 = 0; j3 < n; j3++) {
+              var dc = row.getCell(blockCol(c3, j3));
+              dc.value = D.rows[i][j3] || ' ';
+              exStyleCell(dc, exIsWrap(j3, i), { firstCol: j3 === 0 });
+            }
+            var h = exRowHeightMm(i);
+            if (h > maxH) maxH = h;
+          } else {
+            for (var j4 = 0; j4 < n; j4++) {
+              row.getCell(blockCol(c3, j4)).value = '';
+            }
+          }
+          if (c3 < cols - 1) row.getCell(gutterCol(c3)).value = '';
+        }
+        row.height = mmToPt(maxH || L.cellH);
+        rowPtr++;
+      }
+
+      if (p < list.length - 1) ws.getRow(rowPtr - 1).addPageBreak(1, totalCols);
+    }
+
+    var ws2 = wb.addWorksheet('数据');
+    var head2 = [];
+    var widths2 = [];
+    for (var jd = 0; jd < n; jd++) {
+      head2.push(D.header[jd] || '');
+      widths2.push({ width: Math.min(60, Math.max(5, (WRAW.max[jd] - 5) / 7)) });
+    }
+    ws2.columns = widths2;
+    var hrow = ws2.getRow(1);
+    for (var je = 0; je < n; je++) {
+      var c4 = hrow.getCell(je + 1);
+      c4.value = head2[je];
+      c4.font = { name: exFontName(), size: 10, bold: true };
+      c4.alignment = { horizontal: 'left', vertical: 'middle' };
+      if (S.shade) c4.fill = EX_HEADFILL;
+    }
+    hrow.height = 20;
+    var bodyRows = [];
+    for (var i2 = 0; i2 < D.rows.length; i2++) bodyRows.push(D.rows[i2].slice());
+    ws2.addRows(bodyRows);
+    ws2.views = [{ state: 'frozen', ySplit: 1 }];
+    var lastRef = (function (num) {
+      var st = '';
+      while (num > 0) { var m = (num - 1) % 26; st = String.fromCharCode(65 + m) + st; num = Math.floor((num - m - 1) / 26); }
+      return st;
+    })(n);
+    ws2.autoFilter = 'A1:' + lastRef + '1';
+
+    return wb.xlsx.writeBuffer().then(function (buf) {
+      return { buf: buf, pages: list.length };
+    });
+  }
+
+  function doExport() {
+    if (!PAGES.length) return;
+    if (typeof ExcelJS === 'undefined') {
+      var nt0 = $('#stageNote');
+      if (nt0) nt0.textContent = 'Excel 组件没有加载出来，请刷新页面再试。';
+      return;
+    }
+    var b = $('#exportBtn');
+    b.disabled = true;
+    var old = b.textContent;
+    b.textContent = '导出中…';
+    setTimeout(function () {
+      buildWorkbook($('#pRange') ? $('#pRange').value : '').then(function (r) {
+        var blob = new Blob([r.buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var name = (S.title || '分栏打印').replace(/[\\/:*?"<>|]/g, '_') + '.xlsx';
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 4000);
+        b.disabled = false;
+        b.textContent = old;
+        var nt = $('#stageNote');
+        if (nt) nt.textContent = '已导出「' + name + '」（打印版 ' + r.pages + ' 页 + 数据表）。打开后直接按 Ctrl+P 打印，页码与预览一致。';
+      }).catch(function (e) {
+        b.disabled = false;
+        b.textContent = old;
+        var nt2 = $('#stageNote');
+        if (nt2) nt2.textContent = '导出失败：' + (e && e.message ? e.message : e);
+      });
+    }, 30);
+  }
+
   /* ---------------- 打印（独立窗口） ---------------- */
 
   function parseRange(str, n) {
@@ -1097,6 +1309,7 @@
   });
 
   if ($('#printBtn')) $('#printBtn').addEventListener('click', doPrint);
+  if ($('#exportBtn')) $('#exportBtn').addEventListener('click', doExport);
 
   if ($('#file')) $('#file').addEventListener('change', function () {
     if (this.files && this.files[0]) readFile(this.files[0]);
@@ -1206,6 +1419,7 @@
     get pages() { return PAGES.length; },
     get rendered() { return Object.keys(V.nodes).length; },
     doc: function (a) { return buildDoc(parseRange(a || '', PAGES.length)); },
+    buildXlsx: function (a) { return buildWorkbook(a || ''); },
     time: function () {
       var t0 = performance.now(); measure(true); var t1 = performance.now();
       compute(); var t2 = performance.now(); paint(); var t3 = performance.now();
